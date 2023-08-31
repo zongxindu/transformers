@@ -17,6 +17,7 @@ import copy
 import inspect
 
 from transformers.testing_utils import require_torch, torch_device
+from transformers.utils.backbone_utils import BackboneType
 
 
 @require_torch
@@ -30,7 +31,8 @@ class BackboneTesterMixin:
         # test default config
         config = config_class()
         self.assertIsNotNone(config)
-        expected_stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(config.depths) + 1)]
+        num_stages = len(config.depths) if hasattr(config, "depths") else config.num_hidden_layers
+        expected_stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_stages + 1)]
         self.assertEqual(config.stage_names, expected_stage_names)
         self.assertTrue(set(config.out_features).issubset(set(config.stage_names)))
 
@@ -104,6 +106,8 @@ class BackboneTesterMixin:
 
             self.assertEqual(len(result.feature_maps), len(config.out_features))
             self.assertEqual(len(model.channels), len(config.out_features))
+            self.assertEqual(len(result.feature_maps), len(config.out_indices))
+            self.assertEqual(len(model.channels), len(config.out_indices))
 
             # Check output of last stage is taken if out_features=None, out_indices=None
             modified_config = copy.deepcopy(config)
@@ -140,6 +144,7 @@ class BackboneTesterMixin:
         for backbone_class in self.all_model_classes:
             backbone = backbone_class(config)
 
+            self.assertTrue(hasattr(backbone, "backbone_type"))
             self.assertTrue(hasattr(backbone, "stage_names"))
             self.assertTrue(hasattr(backbone, "num_features"))
             self.assertTrue(hasattr(backbone, "out_indices"))
@@ -147,6 +152,7 @@ class BackboneTesterMixin:
             self.assertTrue(hasattr(backbone, "out_feature_channels"))
             self.assertTrue(hasattr(backbone, "channels"))
 
+            self.assertIsInstance(backbone.backbone_type, BackboneType)
             # Verify num_features has been initialized in the backbone init
             self.assertIsNotNone(backbone.num_features)
             self.assertTrue(len(backbone.channels) == len(backbone.out_indices))

@@ -80,6 +80,7 @@ fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
 	python utils/check_table.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
+	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_task_guides.py --fix_and_overwrite
 
 # Run tests for the library
@@ -111,3 +112,10 @@ post-release:
 
 post-patch:
 	python utils/release.py --post_release --patch
+
+build-release:
+	rm -rf dist
+	rm -rf build
+	python setup.py bdist_wheel
+	python setup.py sdist
+	python utils/check_build.py

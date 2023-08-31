@@ -27,7 +27,11 @@ from parameterized import parameterized
 import tests.trainer.test_trainer
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
-from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available, unset_hf_deepspeed_config
+from transformers.integrations.deepspeed import (
+    HfDeepSpeedConfig,
+    is_deepspeed_available,
+    unset_hf_deepspeed_config,
+)
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStd,
@@ -113,7 +117,7 @@ def require_deepspeed_aio(test_case):
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
     from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
-    from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
+    from transformers.integrations.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 
 def get_launcher(distributed=False):
@@ -365,16 +369,19 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         self.assertNotEqual(new_a, a)
 
     def test_hf_scheduler_ds_optimizer(self):
-        a = 0
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_zero2_dict = self.get_config_dict(ZERO2)
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
             ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
             trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
-            trainer.train()
-        new_a = trainer.model.a.item()
-        self.assertNotEqual(new_a, a)
+            with self.assertRaises(Exception) as context:
+                trainer.train()
+        self.assertIn(
+            "Found `optimizer` configured in the DeepSpeed config, but no `scheduler`. "
+            "Please configure a scheduler in the DeepSpeed config.",
+            str(context.exception),
+        )
 
     @require_deepspeed_aio
     def test_stage3_nvme_offload(self):
@@ -751,6 +758,8 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             config = deepspeed_config()
             self.assertTrue(bool(config), "Deepspeed config should be accessible")
 
+            # with accelerate integration below line is additionally required for this test to pass
+            trainer.accelerator.state._reset_state()
             del trainer
             # now weakref should gc the global and we shouldn't get anything here
             config = deepspeed_config()
@@ -783,8 +792,8 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         with mockenv_context(**self.dist_env_1_gpu):
             args_dict = {
-                "per_gpu_train_batch_size": 1,
-                "per_gpu_eval_batch_size": 1,
+                "per_device_train_batch_size": 1,
+                "per_device_eval_batch_size": 1,
                 "gradient_accumulation_steps": 1,
                 "learning_rate": 1e-4,
                 "num_train_epochs": 1,

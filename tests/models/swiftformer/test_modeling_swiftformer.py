@@ -58,9 +58,9 @@ class SwiftFormerModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         image_size=224,
-        num_labels=1000,
-        layer_depths=[3, 3, 6, 4],
-        embed_dims=[48, 56, 112, 220],
+        num_labels=3,
+        layer_depths=[1, 1, 1, 1],
+        embed_dims=[16, 16, 32, 32],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -139,7 +139,6 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     """
 
     all_model_classes = (SwiftFormerModel, SwiftFormerForImageClassification) if is_torch_available() else ()
-
     pipeline_model_mapping = (
         {"feature-extraction": SwiftFormerModel, "image-classification": SwiftFormerForImageClassification}
         if is_torch_available()
@@ -284,16 +283,16 @@ def prepare_img():
 @require_vision
 class SwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         model = SwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -303,5 +302,5 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]])
+        expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
